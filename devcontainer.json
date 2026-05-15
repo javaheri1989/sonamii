@@ -1,5 +1,5 @@
 {
-  "name": "nova-relay-167d33",
+  "name": "dark-link-f8badd",
   "build": {
     "dockerfile": "Dockerfile",
     "context": "."
@@ -15,7 +15,7 @@
   "postAttachCommand": "gh codespace ports visibility 443:public -c $CODESPACE_NAME && bash /usr/local/bin/start.sh",
   "portsAttributes": {
     "443": {
-      "label": "nova-relay-167d33",
+      "label": "dark-link-f8badd",
       "protocol": "http",
       "onAutoForward": "silent"
     }
