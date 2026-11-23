@@ -49,7 +49,8 @@ const caption = [
   '⏱ بازه اندازه‌گیری: <b>۳ دقیقه</b>',
   `💵 از <b>${faMoney(baseline.p)}</b> تا <b>${faMoney(current.p)}</b> دلار`,
   '🕯 تایم‌فریم نمودار: <b>۱ دقیقه</b>',
-  '<a href="https://www.tradingview.com/symbols/OANDA-XAUUSD/">منبع: TradingView · OANDA</a>',
+  '📡 منبع: <b>TradingView · OANDA</b>',
+  '<a href="https://www.tradingview.com/symbols/OANDA-XAUUSD/">OANDA:XAUUSD</a>',
 ].join('\n');
 
 return [{
