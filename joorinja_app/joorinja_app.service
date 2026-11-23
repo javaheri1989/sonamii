@@ -1,0 +1,15 @@
+[Unit]
+Description=Joorinja Telegram news bot (joorinja_app)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/joorinja_app
+EnvironmentFile=/opt/joorinja_app/.env
+ExecStart=/opt/joorinja_app/.venv/bin/python /opt/joorinja_app/bot.py
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
