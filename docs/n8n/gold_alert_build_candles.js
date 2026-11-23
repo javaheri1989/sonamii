@@ -236,19 +236,23 @@ function drawRuler() {
   const priceScalePad = 88;
   const maxX = box.clientWidth - priceScalePad - 6;
 
-  // Prefer empty space: to the RIGHT of the measure band (into rightOffset gap),
-  // else LEFT of band, else above/below in free area — never centered on candles if avoidable.
-  let labelX = right + 12;
-  let labelY = payload.up ? top + 4 : bottom - labelH - 4;
-  if (labelX + labelW > maxX) {
-    labelX = Math.max(6, left - labelW - 12);
+  // Put the TV measure box in EMPTY chart space (away from the move candles).
+  // Prefer left open area when the measure sits on the right edge; else right gap.
+  const chartW = box.clientWidth;
+  const moveOnRight = midX > chartW * 0.55;
+  let labelX, labelY;
+  if (moveOnRight) {
+    // empty zone on the left / mid-left, vertically near mid of measure
+    labelX = Math.max(10, Math.min(chartW * 0.22, maxX - labelW));
+    labelY = Math.min(Math.max((top + bottom) / 2 - labelH / 2, 10), box.clientHeight - labelH - 10);
+  } else {
+    labelX = Math.min(right + 14, maxX - labelW);
+    if (labelX < left) labelX = Math.max(10, left - labelW - 14);
+    labelY = payload.up ? Math.max(10, top - labelH - 8) : Math.min(bottom + 8, box.clientHeight - labelH - 10);
   }
-  if (labelX < 6 || labelX + labelW > maxX) {
-    labelX = Math.min(Math.max(midX - labelW / 2, 6), maxX - labelW);
-    labelY = top - labelH - 8;
-    if (labelY < 6) labelY = Math.min(bottom + 8, box.clientHeight - labelH - 6);
-  }
-  labelY = Math.min(Math.max(labelY, 6), box.clientHeight - labelH - 6);
+  // keep fully inside plot
+  labelX = Math.min(Math.max(labelX, 8), maxX - labelW);
+  labelY = Math.min(Math.max(labelY, 8), box.clientHeight - labelH - 8);
 
   // Vertical arrow inside band (TV style)
   const arrowX = midX;
