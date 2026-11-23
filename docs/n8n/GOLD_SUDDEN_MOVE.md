@@ -19,6 +19,12 @@ n8n reaches the feed at `http://172.18.0.1:18766/...` (Docker bridge gateway).
 4. Build HTML with **TradingView Lightweight Charts™** (60–120 × 1m candles, price/time scales, measure/ruler in USD)
 5. Browserless screenshot → Telegram photo
 
+## Ruler (TradingView measure)
+Box format matches TV: `Δprice (Δ%) points` + `N bars, Nm`.
+- 1 pip = `$0.01` (= TV measure third number / points)
+- 1 pipette = `$0.001` (OANDA `pricescale=1000`)
+Label is placed in empty chart space beside the measure band.
+
 ## Caption
 Includes XAUUSD **pips** (1 pip = $0.01), dollar move, and attribution:
 `منبع: TradingView · OANDA`.

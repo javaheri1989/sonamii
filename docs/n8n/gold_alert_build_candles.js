@@ -6,13 +6,17 @@ if (raw.data_state && raw.data_state.status && raw.data_state.status !== 'fresh'
   throw new Error('TradingView OANDA candle feed is not fresh: ' + raw.data_state.status);
 }
 
+// OANDA:XAUUSD pricescale=1000 → tick/pipette=0.001; TradingView ruler "points" use pip=0.01
+const PIP_SIZE = 0.01; // 1 pip = $0.01 = 10 pipettes (matches TV measure third number)
+
 const observedAt = Number(alert.observedAt);
 const baselineAt = Number(alert.baselineAt || (observedAt - 3 * 60 * 1000));
 const baselinePrice = Number(alert.baseline);
 const endPrice = Number(alert.price);
-const upMove = Number(alert.move) > 0;
+const signedMove = Number(alert.move);
+const upMove = signedMove > 0;
 const accent = upMove ? '#26a69a' : '#ef5350';
-const moveAbs = Math.abs(Number(alert.move));
+const moveAbs = Math.abs(signedMove);
 const windowMinutes = Math.max(1, Math.round((observedAt - baselineAt) / 60000) || 3);
 
 const candles = points
@@ -37,10 +41,10 @@ if (chartCandles.length < 45) {
 
 const tvData = chartCandles.map((p) => ({
   time: Math.floor(p.t / 1000),
-  open: Number(p.o.toFixed(2)),
-  high: Number(p.h.toFixed(2)),
-  low: Number(p.l.toFixed(2)),
-  close: Number(p.c.toFixed(2)),
+  open: Number(p.o.toFixed(3)),
+  high: Number(p.h.toFixed(3)),
+  low: Number(p.l.toFixed(3)),
+  close: Number(p.c.toFixed(3)),
 }));
 const dedup = [];
 for (const row of tvData) {
@@ -67,7 +71,10 @@ if (startTime >= endTime) {
   const idx = Math.max(0, dedup.findIndex((r) => r.time === endTime) - 3);
   startTime = dedup[idx].time;
 }
-const pct = startPrice ? (moveAbs / startPrice) * 100 : 0;
+
+const barCount = Math.max(1, dedup.filter((r) => r.time >= startTime && r.time <= endTime).length);
+const pctSigned = startPrice ? (signedMove / startPrice) * 100 : 0;
+const tvPoints = signedMove / PIP_SIZE; // TradingView ruler third value (1 pip = 0.01)
 
 let lib = '';
 try {
@@ -96,8 +103,10 @@ const payload = JSON.stringify({
   endPrice: endP,
   accent,
   up: upMove,
-  moveAbs: Number(moveAbs.toFixed(2)),
-  pct: Number(pct.toFixed(2)),
+  moveSigned: Number(signedMove.toFixed(3)),
+  pctSigned: Number(pctSigned.toFixed(2)),
+  tvPoints: Number(tvPoints.toFixed(1)),
+  barCount,
   windowMinutes,
 }).replace(/</g, '\\u003c');
 
@@ -133,8 +142,8 @@ const html = `<!doctype html>
       <div class="sub">OANDA via TradingView · ${dedup.length} × 1m</div>
     </div>
     <div class="right">
-      <div class="px">$${Number(alert.price).toFixed(2)}</div>
-      <div class="ch">${upMove ? '▲' : '▼'} $${moveAbs.toFixed(2)} in ${windowMinutes}m</div>
+      <div class="px">$${Number(endP).toFixed(3)}</div>
+      <div class="ch">${upMove ? '▲' : '▼'} $${moveAbs.toFixed(3)} in ${windowMinutes}m</div>
     </div>
   </div>
   <div class="chart-box">
@@ -142,8 +151,8 @@ const html = `<!doctype html>
     <svg id="ruler" xmlns="http://www.w3.org/2000/svg"></svg>
   </div>
   <div class="foot">
-    <div>OHLC: TradingView · OANDA <span class="badge">Measure: USD ($)</span></div>
-    <div>1-minute candles · window ${windowMinutes}m</div>
+    <div>OHLC: TradingView · OANDA <span class="badge">Ruler: TV measure</span></div>
+    <div>1 pip = $0.01 · 1 pipette = $0.001</div>
   </div>
 </div>
 <script>
@@ -187,6 +196,14 @@ series.setData(payload.candles);
 chart.timeScale().fitContent();
 chart.timeScale().applyOptions({ rightOffset: 14 });
 
+function fmtSigned(n, digits) {
+  const v = Number(n);
+  const body = Math.abs(v).toFixed(digits);
+  if (v > 0) return '+' + body;
+  if (v < 0) return '−' + body; // unicode minus like TV
+  return body;
+}
+
 function drawRuler() {
   const box = document.querySelector('.chart-box');
   ruler.setAttribute('width', box.clientWidth);
@@ -201,36 +218,81 @@ function drawRuler() {
   const right = Math.max(x1, x2);
   const top = Math.min(y1, y2);
   const bottom = Math.max(y1, y2);
-  const w = Math.max(12, right - left);
-  const h = Math.max(12, bottom - top);
+  const w = Math.max(10, right - left);
+  const h = Math.max(10, bottom - top);
+  const midX = (x1 + x2) / 2;
   const color = payload.accent;
-  const sign = payload.up ? '+' : '−';
-  const line1 = sign + '$' + payload.moveAbs.toFixed(2) + ' USD';
-  const line2 = payload.pct.toFixed(2) + '%  ·  ' + payload.windowMinutes + 'm';
-  const labelW = 168;
-  const labelH = 44;
-  const priceScalePad = 86;
-  const maxX = box.clientWidth - priceScalePad - 8;
-  // Prefer above the measure box, else below, else side — keep off candles when possible
-  let labelX = Math.min(Math.max(left + (w - labelW) / 2, 8), maxX - labelW);
-  let labelY = top - labelH - 10;
-  if (labelY < 8) labelY = Math.min(bottom + 10, box.clientHeight - labelH - 8);
-  if (labelY < 8 || labelY + labelH > box.clientHeight - 4) {
-    labelX = right + 12;
-    if (labelX + labelW > maxX) labelX = Math.max(8, left - labelW - 12);
-    labelY = Math.min(Math.max(top + h / 2 - labelH / 2, 8), box.clientHeight - labelH - 8);
-  }
-  const cx = labelX + labelW / 2;
+  const fillBand = payload.up ? 'rgba(38,166,154,0.16)' : 'rgba(239,83,80,0.16)';
 
+  // TradingView measure tooltip format:
+  // -9.619 (−0.26%) −961.9
+  // 5 bars, 5m
+  const line1 = fmtSigned(payload.moveSigned, 3) + ' (' + fmtSigned(payload.pctSigned, 2) + '%) ' + fmtSigned(payload.tvPoints, 1);
+  const line2 = payload.barCount + ' bars, ' + payload.windowMinutes + 'm';
+
+  // Measure label size (TV-like compact pill)
+  const labelW = Math.max(168, Math.min(240, 10 + line1.length * 7.2));
+  const labelH = 40;
+  const priceScalePad = 88;
+  const maxX = box.clientWidth - priceScalePad - 6;
+
+  // Prefer empty space: to the RIGHT of the measure band (into rightOffset gap),
+  // else LEFT of band, else above/below in free area — never centered on candles if avoidable.
+  let labelX = right + 12;
+  let labelY = payload.up ? top + 4 : bottom - labelH - 4;
+  if (labelX + labelW > maxX) {
+    labelX = Math.max(6, left - labelW - 12);
+  }
+  if (labelX < 6 || labelX + labelW > maxX) {
+    labelX = Math.min(Math.max(midX - labelW / 2, 6), maxX - labelW);
+    labelY = top - labelH - 8;
+    if (labelY < 6) labelY = Math.min(bottom + 8, box.clientHeight - labelH - 6);
+  }
+  labelY = Math.min(Math.max(labelY, 6), box.clientHeight - labelH - 6);
+
+  // Vertical arrow inside band (TV style)
+  const arrowX = midX;
+  const arrowTop = top + 4;
+  const arrowBot = bottom - 4;
+  const arrowLen = Math.max(16, arrowBot - arrowTop);
+  const head = 7;
+  let arrowPoly;
+  if (payload.up) {
+    arrowPoly = [
+      arrowX + ',' + arrowTop,
+      (arrowX - head) + ',' + (arrowTop + head + 2),
+      (arrowX - 2) + ',' + (arrowTop + head + 2),
+      (arrowX - 2) + ',' + arrowBot,
+      (arrowX + 2) + ',' + arrowBot,
+      (arrowX + 2) + ',' + (arrowTop + head + 2),
+      (arrowX + head) + ',' + (arrowTop + head + 2),
+    ].join(' ');
+  } else {
+    arrowPoly = [
+      arrowX + ',' + arrowBot,
+      (arrowX - head) + ',' + (arrowBot - head - 2),
+      (arrowX - 2) + ',' + (arrowBot - head - 2),
+      (arrowX - 2) + ',' + arrowTop,
+      (arrowX + 2) + ',' + arrowTop,
+      (arrowX + 2) + ',' + (arrowBot - head - 2),
+      (arrowX + head) + ',' + (arrowBot - head - 2),
+    ].join(' ');
+  }
+
+  const cx = labelX + labelW / 2;
   ruler.innerHTML = [
-    '<defs><filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.55"/></filter></defs>',
-    '<rect x="'+left+'" y="'+top+'" width="'+w+'" height="'+h+'" fill="'+(payload.up ? 'rgba(38,166,154,0.18)' : 'rgba(239,83,80,0.18)')+'" stroke="'+color+'" stroke-width="1.8" stroke-dasharray="5 4" rx="2"/>',
-    '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="#f0b90b" stroke-width="2.2"/>',
-    '<circle cx="'+x1+'" cy="'+y1+'" r="5" fill="#f0b90b" stroke="#131722" stroke-width="1.5"/>',
-    '<circle cx="'+x2+'" cy="'+y2+'" r="5" fill="'+color+'" stroke="#131722" stroke-width="1.5"/>',
-    '<rect x="'+labelX+'" y="'+labelY+'" width="'+labelW+'" height="'+labelH+'" rx="6" fill="rgba(15,18,28,0.92)" stroke="'+color+'" stroke-width="1.4" filter="url(#shadow)"/>',
-    '<text x="'+cx+'" y="'+(labelY+18)+'" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="14" font-weight="700" fill="#f0f3fa">'+line1+'</text>',
-    '<text x="'+cx+'" y="'+(labelY+34)+'" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="12" font-weight="600" fill="#b2b5be">'+line2+'</text>',
+    '<defs><filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="1" stdDeviation="2.5" flood-color="#000" flood-opacity="0.45"/></filter></defs>',
+    // shaded measure column
+    '<rect x="'+left+'" y="'+top+'" width="'+w+'" height="'+h+'" fill="'+fillBand+'" stroke="'+color+'" stroke-width="1" rx="1"/>',
+    // horizontal guides at start/end prices
+    '<line x1="'+left+'" y1="'+y1+'" x2="'+right+'" y2="'+y1+'" stroke="'+color+'" stroke-width="1" stroke-dasharray="3 3" opacity="0.85"/>',
+    '<line x1="'+left+'" y1="'+y2+'" x2="'+right+'" y2="'+y2+'" stroke="'+color+'" stroke-width="1" stroke-dasharray="3 3" opacity="0.85"/>',
+    // TV-like vertical arrow
+    '<polygon points="'+arrowPoly+'" fill="'+color+'" opacity="0.95"/>',
+    // solid accent measure box (like TV tooltip)
+    '<rect x="'+labelX+'" y="'+labelY+'" width="'+labelW+'" height="'+labelH+'" rx="4" fill="'+color+'" filter="url(#shadow)"/>',
+    '<text x="'+cx+'" y="'+(labelY+16)+'" text-anchor="middle" font-family="Trebuchet MS,Segoe UI,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#ffffff">'+line1+'</text>',
+    '<text x="'+cx+'" y="'+(labelY+32)+'" text-anchor="middle" font-family="Trebuchet MS,Segoe UI,Arial,sans-serif" font-size="12" font-weight="600" fill="#ffffff">'+line2+'</text>',
   ].join('');
   return true;
 }
@@ -252,6 +314,9 @@ return [{
     price: alert.price,
     move: alert.move,
     pips: alert.pips,
+    tvPoints: Number(tvPoints.toFixed(1)),
+    pipSize: PIP_SIZE,
     candles: dedup.length,
+    barCount,
   },
 }];
