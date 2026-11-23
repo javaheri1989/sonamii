@@ -34,27 +34,29 @@ const sameDirection = Math.sign(previous.p-baseline.p) === Math.sign(move);
 if (Math.abs(move) < threshold || !sameDirection || Math.abs(previous.p-baseline.p) < threshold*0.65) return [];
 if (now - Number(state.goldAlertLastSentAtV1 || 0) < 30*60000) return [];
 
-// XAUUSD retail pip = $0.01
 const PIP = 0.01;
 const pips = Math.round(Math.abs(move) / PIP);
 const up = move > 0;
 const faMoney = (n) => new Intl.NumberFormat('fa-IR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 const faPips = (n) => new Intl.NumberFormat('fa-IR', { maximumFractionDigits: 0 }).format(n);
-const time = new Intl.DateTimeFormat('fa-IR', { timeZone: 'Asia/Tehran', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(current.t));
 const directionFa = up ? 'صعودی' : 'نزولی';
 const arrow = up ? '📈' : '📉';
-const caption =
-  '🚨 <b>حرکت سریع انس جهانی طلا</b>\n' +
-  arrow + ' حرکت ' + directionFa + ': <b>' + faPips(pips) + ' پیپ</b> (' + faMoney(Math.abs(move)) + ' دلار) در ۳ دقیقهٔ اخیر\n' +
-  '💵 از ' + faMoney(baseline.p) + ' به ' + faMoney(current.p) + ' دلار\n' +
-  '🕒 ' + time + ' تهران\n' +
-  '🕯 تایم‌فریم نمودار: ۱ دقیقه\n' +
-  '<a href="https://xaus.com/api/">Source: XAUS</a>';
+
+const caption = [
+  '🚨 <b>حرکت سریع انس جهانی طلا</b>',
+  '',
+  `${arrow} حرکت ${directionFa}: <b>${faPips(pips)} پیپ</b> (${faMoney(Math.abs(move))} دلار)`,
+  '⏱ بازه اندازه‌گیری: <b>۳ دقیقه</b>',
+  `💵 از <b>${faMoney(baseline.p)}</b> تا <b>${faMoney(current.p)}</b> دلار`,
+  '🕯 تایم‌فریم نمودار: <b>۱ دقیقه</b>',
+  '<a href="https://www.tradingview.com/symbols/OANDA-XAUUSD/">منبع: TradingView · OANDA</a>',
+].join('\n');
 
 return [{
   json: {
     caption,
     observedAt: current.t,
+    baselineAt: baseline.t,
     price: current.p,
     baseline: baseline.p,
     move,
